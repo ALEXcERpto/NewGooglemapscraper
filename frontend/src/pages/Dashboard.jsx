@@ -14,13 +14,17 @@ export default function Dashboard() {
   const loadData = async () => {
     try {
       const response = await historyAPI.getAll({ limit: 5 })
-      setRecentSearches(response.data.searches)
+      const searches = response?.data?.searches || []
+      setRecentSearches(searches)
       setStats({
-        total: response.data.pagination.total,
-        saved: response.data.searches.filter(s => s.is_saved).length
+        total: response?.data?.pagination?.total || 0,
+        saved: searches.filter(s => s.is_saved).length
       })
     } catch (err) {
       console.error('Failed to load data:', err)
+      // Set empty state on error
+      setRecentSearches([])
+      setStats({ total: 0, saved: 0 })
     }
   }
 

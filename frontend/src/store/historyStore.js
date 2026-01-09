@@ -14,12 +14,17 @@ export const useHistoryStore = create((set, get) => ({
     try {
       const response = await historyAPI.getAll({ page, savedOnly })
       set({
-        searches: response.data.searches,
-        pagination: response.data.pagination,
+        searches: response?.data?.searches || [],
+        pagination: response?.data?.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 },
         isLoading: false
       })
     } catch (error) {
-      set({ error: error.friendlyMessage, isLoading: false })
+      set({ 
+        error: error?.friendlyMessage || 'Failed to load history', 
+        isLoading: false,
+        searches: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+      })
     }
   },
 
