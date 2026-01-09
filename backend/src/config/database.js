@@ -1,10 +1,12 @@
 import { Low } from 'lowdb'
 import { JSONFile } from 'lowdb/node'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const dbPath = path.join(__dirname, '../../database/db.json')
+const dbDir = path.join(__dirname, '../../database')
+const dbPath = path.join(dbDir, 'db.json')
 
 // Default data structure
 const defaultData = {
@@ -12,6 +14,16 @@ const defaultData = {
   results: [],
   exportJobs: []
 }
+
+// Ensure database directory exists
+const ensureDbDir = () => {
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true })
+    console.log('Database directory created')
+  }
+}
+
+ensureDbDir()
 
 const adapter = new JSONFile(dbPath)
 const db = new Low(adapter, defaultData)
