@@ -14,9 +14,25 @@ app.use(helmet())
 
 // CORS configuration
 app.use(cors({
-  origin: config.corsOrigin,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true)
+    
+    // Check if origin is allowed
+    if (config.corsOrigins.includes(origin) || config.nodeEnv === 'development') {
+      callback(null, true)
+    } else {
+      // In production, allow any vercel.app or onrender.com domain
+      if (origin.includes('vercel.app') || origin.includes('onrender.com')) {
+        callback(null, true)
+      } else {
+        callback(new Error('Not allowed by CORS'))
+      }
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }))
 
 // Request logging
