@@ -53,4 +53,12 @@ export const placeAPI = {
   getPhotos: (placeId, params) => api.get(`/place/${placeId}/photos`, { params })
 }
 
+// Email API
+export const emailAPI = {
+  extractFromUrl: (url) => api.post('/email/extract', { url }),
+  extractFromSearch: (searchId) => api.post(`/email/search/${searchId}/extract`),
+  extractBatch: (urls) => api.post('/email/extract/batch', { urls }),
+  healthCheck: () => api.get('/email/health')
+}
+
 export default api

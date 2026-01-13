@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Download, Save, Star, Phone, Globe, MapPin, Filter, ArrowLeft } from 'lucide-react'
+import { Download, Save, Star, Phone, Globe, MapPin, Filter, ArrowLeft, Mail, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { searchAPI, exportAPI, historyAPI } from '../services/api'
+import { searchAPI, exportAPI, historyAPI, emailAPI } from '../services/api'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import Modal from '../components/common/Modal'
 
@@ -14,12 +14,14 @@ export default function ResultsPage() {
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [extractingEmails, setExtractingEmails] = useState(false)
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [filters, setFilters] = useState({
     minRating: 0,
     hasPhone: false,
     hasWebsite: false,
+    hasEmail: false,
     searchText: ''
   })
 
@@ -76,10 +78,30 @@ export default function ResultsPage() {
     }
   }
 
+  const handleExtractEmails = async () => {
+    const websitesCount = results.filter(r => r.website).length
+    if (websitesCount === 0) {
+      toast.error('No websites found in results')
+      return
+    }
+
+    setExtractingEmails(true)
+    try {
+      const response = await emailAPI.extractFromSearch(searchId)
+      toast.success(`Found ${response.data.uniqueEmails?.length || 0} unique emails from ${response.data.websitesProcessed} websites`)
+      loadResults() // Reload to show updated emails
+    } catch (err) {
+      toast.error('Failed to extract emails. Make sure the email service is running.')
+    } finally {
+      setExtractingEmails(false)
+    }
+  }
+
   const filteredResults = results.filter(r => {
     if (filters.minRating && (r.rating || 0) < filters.minRating) return false
     if (filters.hasPhone && !r.phone) return false
     if (filters.hasWebsite && !r.website) return false
+    if (filters.hasEmail && (!r.emails || r.emails.length === 0)) return false
     if (filters.searchText) {
       const search = filters.searchText.toLowerCase()
       const name = (r.name || '').toLowerCase()
@@ -127,6 +149,24 @@ export default function ResultsPage() {
               Save
             </button>
           )}
+
+          <button
+            onClick={handleExtractEmails}
+            disabled={extractingEmails}
+            className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-600 rounded-lg hover:bg-green-50 disabled:opacity-50"
+          >
+            {extractingEmails ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Extracting...
+              </>
+            ) : (
+              <>
+                <Mail size={18} />
+                Extract Emails
+              </>
+            )}
+          </button>
 
           <div className="relative group">
             <button
@@ -202,6 +242,15 @@ export default function ResultsPage() {
             />
             Has website
           </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={filters.hasEmail}
+              onChange={(e) => setFilters({ ...filters, hasEmail: e.target.checked })}
+              className="rounded"
+            />
+            Has email
+          </label>
         </div>
       </div>
 
@@ -214,6 +263,7 @@ export default function ResultsPage() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Name</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Address</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Phone</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Email</th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Rating</th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Reviews</th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Website</th>
@@ -239,6 +289,27 @@ export default function ResultsPage() {
                         <Phone size={14} />
                         {result.phone}
                       </a>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {result.emails && result.emails.length > 0 ? (
+                      <div className="space-y-1">
+                        {result.emails.slice(0, 2).map((email, i) => (
+                          <a
+                            key={i}
+                            href={`mailto:${email}`}
+                            className="text-green-600 hover:underline flex items-center gap-1 text-sm"
+                          >
+                            <Mail size={12} />
+                            {email}
+                          </a>
+                        ))}
+                        {result.emails.length > 2 && (
+                          <span className="text-xs text-gray-500">+{result.emails.length - 2} more</span>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-gray-400">-</span>
                     )}

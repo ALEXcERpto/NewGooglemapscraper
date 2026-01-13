@@ -25,6 +25,7 @@ class ExportService {
       { label: 'Name', value: 'name' },
       { label: 'Address', value: 'address' },
       { label: 'Phone', value: 'phone' },
+      { label: 'Email', value: row => Array.isArray(row.emails) ? row.emails.join(', ') : row.emails || '' },
       { label: 'Website', value: 'website' },
       { label: 'Rating', value: 'rating' },
       { label: 'Reviews', value: 'review_count' },
@@ -47,6 +48,7 @@ class ExportService {
       name: r.name,
       address: r.address,
       phone: r.phone,
+      emails: r.emails || [],
       website: r.website,
       rating: r.rating,
       review_count: r.review_count,
@@ -73,6 +75,7 @@ class ExportService {
       { header: 'Name', key: 'name', width: 30 },
       { header: 'Address', key: 'address', width: 40 },
       { header: 'Phone', key: 'phone', width: 15 },
+      { header: 'Email', key: 'emails', width: 30 },
       { header: 'Website', key: 'website', width: 30 },
       { header: 'Rating', key: 'rating', width: 8 },
       { header: 'Reviews', key: 'review_count', width: 10 },
@@ -88,6 +91,7 @@ class ExportService {
         name: result.name,
         address: result.address,
         phone: result.phone,
+        emails: Array.isArray(result.emails) ? result.emails.join(', ') : result.emails || '',
         website: result.website,
         rating: result.rating,
         review_count: result.review_count,
@@ -109,7 +113,7 @@ class ExportService {
     // Add auto-filter
     worksheet.autoFilter = {
       from: 'A1',
-      to: `J${results.length + 1}`
+      to: `K${results.length + 1}`
     }
 
     const filePath = path.join(this.exportDir, `${filename}.xlsx`)

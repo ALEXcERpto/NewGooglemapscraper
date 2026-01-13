@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { MapPin, Search, History, Menu, X, Home } from 'lucide-react'
+import { MapPin, Search, History, Menu, X, Home, Mail } from 'lucide-react'
 import clsx from 'clsx'
 
 const navItems = [
   { path: '/', icon: Home, label: 'Dashboard' },
   { path: '/search', icon: Search, label: 'Search' },
+  { path: '/email', icon: Mail, label: 'Email Finder' },
   { path: '/history', icon: History, label: 'History' }
 ]
 

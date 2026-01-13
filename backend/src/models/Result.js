@@ -51,6 +51,25 @@ class Result {
     await db.write()
     return { changes: before - db.data.results.length }
   }
+
+  static async update(resultId, data) {
+    await db.read()
+    const index = db.data.results.findIndex(r => r.id === parseInt(resultId))
+    if (index === -1) return null
+
+    db.data.results[index] = {
+      ...db.data.results[index],
+      ...data,
+      updated_at: new Date().toISOString()
+    }
+    await db.write()
+    return db.data.results[index]
+  }
+
+  static async getById(resultId) {
+    await db.read()
+    return db.data.results.find(r => r.id === parseInt(resultId)) || null
+  }
 }
 
 export default Result
