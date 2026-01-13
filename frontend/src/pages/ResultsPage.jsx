@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Download, Save, Star, Phone, Globe, MapPin, Filter, ArrowLeft, Mail, Loader2 } from 'lucide-react'
+import { Download, Save, Star, Phone, Globe, MapPin, Filter, ArrowLeft, Mail, Loader2, Copy, CheckCircle, X, ChevronDown, ChevronUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { searchAPI, exportAPI, historyAPI, emailAPI } from '../services/api'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -15,6 +15,9 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [extractingEmails, setExtractingEmails] = useState(false)
+  const [extractingRowId, setExtractingRowId] = useState(null)
+  const [emailSectionOpen, setEmailSectionOpen] = useState(false)
+  const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 })
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [filters, setFilters] = useState({
@@ -86,15 +89,74 @@ export default function ResultsPage() {
     }
 
     setExtractingEmails(true)
+    setExtractionProgress({ current: 0, total: websitesCount })
     try {
       const response = await emailAPI.extractFromSearch(searchId)
       toast.success(`Found ${response.data.uniqueEmails?.length || 0} unique emails from ${response.data.websitesProcessed} websites`)
+      setEmailSectionOpen(true)
       loadResults() // Reload to show updated emails
     } catch (err) {
       toast.error('Failed to extract emails. Make sure the email service is running.')
     } finally {
       setExtractingEmails(false)
+      setExtractionProgress({ current: 0, total: 0 })
     }
+  }
+
+  const handleExtractSingleEmail = async (result) => {
+    if (!result.website) {
+      toast.error('No website available for this business')
+      return
+    }
+
+    setExtractingRowId(result.id)
+    try {
+      const response = await emailAPI.extractBatch([result.website])
+      const emails = response.data.results?.[0]?.emails || []
+
+      if (emails.length > 0) {
+        // Update local state immediately
+        setResults(prev => prev.map(r =>
+          r.id === result.id ? { ...r, emails } : r
+        ))
+        toast.success(`Found ${emails.length} email(s)`)
+      } else {
+        toast.info('No emails found on this website')
+      }
+    } catch (err) {
+      toast.error('Failed to extract emails')
+    } finally {
+      setExtractingRowId(null)
+    }
+  }
+
+  // Get all unique emails from results
+  const allEmails = [...new Set(results.flatMap(r => r.emails || []))]
+  const resultsWithEmails = results.filter(r => r.emails && r.emails.length > 0).length
+  const resultsWithWebsites = results.filter(r => r.website).length
+
+  const copyAllEmails = () => {
+    if (allEmails.length === 0) {
+      toast.error('No emails to copy')
+      return
+    }
+    navigator.clipboard.writeText(allEmails.join('\n'))
+    toast.success(`Copied ${allEmails.length} emails to clipboard`)
+  }
+
+  const downloadEmails = () => {
+    if (allEmails.length === 0) {
+      toast.error('No emails to download')
+      return
+    }
+    const blob = new Blob([allEmails.join('\n')], { type: 'text/plain' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `emails_${searchId}.txt`
+    a.click()
+    window.URL.revokeObjectURL(url)
+    toast.success(`Downloaded ${allEmails.length} emails`)
   }
 
   const filteredResults = results.filter(r => {
@@ -149,24 +211,6 @@ export default function ResultsPage() {
               Save
             </button>
           )}
-
-          <button
-            onClick={handleExtractEmails}
-            disabled={extractingEmails}
-            className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-600 rounded-lg hover:bg-green-50 disabled:opacity-50"
-          >
-            {extractingEmails ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                Extracting...
-              </>
-            ) : (
-              <>
-                <Mail size={18} />
-                Extract Emails
-              </>
-            )}
-          </button>
 
           <div className="relative group">
             <button
@@ -254,6 +298,120 @@ export default function ResultsPage() {
         </div>
       </div>
 
+      {/* Email Section */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <button
+          onClick={() => setEmailSectionOpen(!emailSectionOpen)}
+          className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Mail className="text-green-600" size={24} />
+            </div>
+            <div className="text-left">
+              <h3 className="font-semibold text-gray-900">Email Extraction</h3>
+              <p className="text-sm text-gray-500">
+                {allEmails.length} unique emails found from {resultsWithEmails} businesses
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            {extractingEmails && (
+              <div className="flex items-center gap-2 text-green-600">
+                <Loader2 size={18} className="animate-spin" />
+                <span className="text-sm">Extracting from {extractionProgress.total} websites...</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <span className="px-2 py-1 bg-gray-100 rounded">{resultsWithWebsites} with websites</span>
+              <span className="px-2 py-1 bg-green-100 text-green-700 rounded">{resultsWithEmails} with emails</span>
+            </div>
+            {emailSectionOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </div>
+        </button>
+
+        {emailSectionOpen && (
+          <div className="border-t border-gray-200 p-6">
+            {/* Email Actions */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex gap-2">
+                <button
+                  onClick={handleExtractEmails}
+                  disabled={extractingEmails || resultsWithWebsites === 0}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {extractingEmails ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Extracting...
+                    </>
+                  ) : (
+                    <>
+                      <Mail size={16} />
+                      Extract All Emails
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={copyAllEmails}
+                  disabled={allEmails.length === 0}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Copy size={16} />
+                  Copy All ({allEmails.length})
+                </button>
+                <button
+                  onClick={downloadEmails}
+                  disabled={allEmails.length === 0}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Download size={16} />
+                  Download .txt
+                </button>
+              </div>
+            </div>
+
+            {/* Email List */}
+            {allEmails.length > 0 ? (
+              <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {allEmails.map((email, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-white px-3 py-2 rounded border border-gray-200 group"
+                    >
+                      <a
+                        href={`mailto:${email}`}
+                        className="text-sm text-green-600 hover:underline truncate flex-1"
+                      >
+                        {email}
+                      </a>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(email)
+                          toast.success('Email copied')
+                        }}
+                        className="ml-2 p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Mail size={40} className="mx-auto mb-3 text-gray-300" />
+                <p>No emails extracted yet</p>
+                <p className="text-sm mt-1">Click "Extract All Emails" to crawl websites for email addresses</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Results Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -310,8 +468,26 @@ export default function ResultsPage() {
                           <span className="text-xs text-gray-500">+{result.emails.length - 2} more</span>
                         )}
                       </div>
+                    ) : result.website ? (
+                      <button
+                        onClick={() => handleExtractSingleEmail(result)}
+                        disabled={extractingRowId === result.id}
+                        className="text-xs px-2 py-1 bg-green-50 text-green-600 border border-green-200 rounded hover:bg-green-100 disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {extractingRowId === result.id ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" />
+                            Extracting...
+                          </>
+                        ) : (
+                          <>
+                            <Mail size={12} />
+                            Extract
+                          </>
+                        )}
+                      </button>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span className="text-gray-400 text-xs">No website</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
