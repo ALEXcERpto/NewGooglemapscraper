@@ -3,9 +3,9 @@ import re
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, HttpUrl
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
+from pydantic import BaseModel
 import logging
+import aiohttp
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +35,8 @@ FALSE_POSITIVE_PATTERNS = [
     r'.*\.gif$',
     r'.*\.svg$',
     r'.*@\d+x\..*$',
+    r'.*@sentry.*$',
+    r'.*wixpress\.com$',
 ]
 
 
@@ -83,46 +85,40 @@ def extract_emails_from_text(text: str) -> List[str]:
     return filter_emails(list(set(matches)))
 
 
-async def crawl_url(url: str) -> EmailResult:
-    """Crawl a single URL and extract emails"""
+async def crawl_url_simple(url: str) -> EmailResult:
+    """Crawl a single URL using simple HTTP request and extract emails"""
     try:
-        browser_config = BrowserConfig(
-            headless=True,
-            verbose=False
-        )
-
-        crawl_config = CrawlerRunConfig(
-            wait_until="domcontentloaded",
-            page_timeout=30000,
-        )
-
-        async with AsyncWebCrawler(config=browser_config) as crawler:
-            result = await crawler.arun(
-                url=url,
-                config=crawl_config
-            )
-
-            if not result.success:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url, headers=headers, ssl=False) as response:
+                if response.status != 200:
+                    return EmailResult(
+                        url=url,
+                        emails=[],
+                        status="error",
+                        error=f"HTTP {response.status}"
+                    )
+                
+                html = await response.text()
+                emails = extract_emails_from_text(html)
+                
                 return EmailResult(
                     url=url,
-                    emails=[],
-                    status="error",
-                    error=result.error_message or "Failed to crawl"
+                    emails=emails,
+                    status="success"
                 )
-
-            # Extract emails from markdown content and raw HTML
-            emails_from_markdown = extract_emails_from_text(result.markdown or "")
-            emails_from_html = extract_emails_from_text(result.html or "")
-
-            all_emails = list(set(emails_from_markdown + emails_from_html))
-            filtered_emails = filter_emails(all_emails)
-
-            return EmailResult(
-                url=url,
-                emails=filtered_emails,
-                status="success"
-            )
-
+                
+    except asyncio.TimeoutError:
+        return EmailResult(
+            url=url,
+            emails=[],
+            status="error",
+            error="Request timeout"
+        )
     except Exception as e:
         logger.error(f"Error crawling {url}: {str(e)}")
         return EmailResult(
@@ -142,7 +138,7 @@ async def health_check():
 @app.post("/extract", response_model=ExtractResponse)
 async def extract_emails(request: ExtractRequest):
     """Extract emails from a single URL"""
-    result = await crawl_url(request.url)
+    result = await crawl_url_simple(request.url)
 
     return ExtractResponse(
         success=result.status == "success",
@@ -162,11 +158,11 @@ async def extract_emails_batch(request: ExtractBatchRequest):
         )
 
     # Process URLs in parallel with concurrency limit
-    semaphore = asyncio.Semaphore(5)  # Max 5 concurrent crawls
+    semaphore = asyncio.Semaphore(10)  # Max 10 concurrent requests
 
     async def crawl_with_limit(url: str) -> EmailResult:
         async with semaphore:
-            return await crawl_url(url)
+            return await crawl_url_simple(url)
 
     tasks = [crawl_with_limit(url) for url in request.urls]
     results = await asyncio.gather(*tasks)
