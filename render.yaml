@@ -5,12 +5,18 @@ services:
     env: python
     region: oregon
     rootDir: email-service
-    buildCommand: pip install -r requirements.txt && crawl4ai-setup
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
+      - key: ZENROWS_API_KEY
+        sync: false
+      - key: ZENROWS_CONCURRENCY
+        value: "5"
+      - key: ZENROWS_RETRIES
+        value: "1"
 
   # Node.js Backend API
   - type: web
